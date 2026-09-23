@@ -1,0 +1,20 @@
+{
+    "name": "Padyak All",
+    "short_name": "Padyak All",
+    "start_url": "/",
+    "background_color": "#0D6EFD",
+    "theme_color": "#0A2472",
+    "display": "standalone",
+    "icons": [
+        {
+            "src": "/logo/padyak192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/logo/padyak512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
