@@ -64,7 +64,7 @@ export default function Login({ onLogin, onGoogleLogin, onSignup }) {
           className="login-zone-form"
           style={{ viewTransitionName: 'auth-form' }}
         >
-
+          <h1>hisghd</h1>
           <h2 className="login-title">
             WELCOME BACK !
           </h2>
