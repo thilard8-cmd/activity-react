@@ -67,6 +67,7 @@ export default function Display({ onLogout }) {
         <h1 className="fw-bold text-primary" style={{fontFamily:'monospace'}}>
           Bookings
         </h1>
+        <h1>potanginamo</h1>
 
         <form onSubmit={formSubmit}>
           <label
