@@ -78,7 +78,7 @@ export default function Login({ onLogin, onGoogleLogin, onSignup }) {
               <label className="login-label">
                 Email
               </label>
-
+                <h1>supot si arlan</h1>
               <input
                 type="email"
                 className="login-input"
