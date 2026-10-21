@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
 
-const API_URL = 'http://localhost:8080/api';
+const API_URL = 'https://backend-5yvp.onrender.com/api';
 
 export default function Display({ onLogout }) {
   const [bookings, setBookings] = useState([]);
