@@ -78,7 +78,7 @@ export default function Login({ onLogin, onGoogleLogin, onSignup }) {
               <label className="login-label">
                 Email
               </label>
-                <h1>supot si arlan</h1>
+                
               <input
                 type="email"
                 className="login-input"
@@ -178,7 +178,7 @@ export default function Login({ onLogin, onGoogleLogin, onSignup }) {
           <button
             type="button"
             onClick={handleGoogleLogin}
-            className="login-btn-google btn-outline-secondary"
+            className="login-btn-google btn-secondary"
             disabled={loading || googleLoading}
           >
             <img

@@ -1,4 +1,5 @@
-const CACHE_NAME = "padyak-all-v1";
+
+const CACHE_NAME = "padyak-all-v3";
 
 const FILES_TO_CACHE = [
     "/",
@@ -11,18 +12,18 @@ const FILES_TO_CACHE = [
     "/logo/padyak512.png"
 ];
 
-self.addEventListener("install", event => {
-    console.log("Service Worker: Installing...");
-
+// INSTALL
+self.addEventListener("install", (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-            console.log("Caching app files...");
-            return Promise.all(
-                FILES_TO_CACHE.map(url =>
-                    cache.add(url).catch(err => {
-                        console.warn("Failed to cache:", url, err);
-                    })
-                )
+        caches.open(CACHE_NAME).then(async (cache) => {
+            await Promise.all(
+                FILES_TO_CACHE.map(async (url) => {
+                    try {
+                        await cache.add(url);
+                    } catch (error) {
+                        console.warn("Failed to cache:", url, error);
+                    }
+                })
             );
         })
     );
@@ -30,50 +31,47 @@ self.addEventListener("install", event => {
     self.skipWaiting();
 });
 
-self.addEventListener("activate", event => {
-    console.log("Service Worker: Activated...");
-
+// ACTIVATE
+self.addEventListener("activate", (event) => {
     event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames
-                    .filter(name => name !== CACHE_NAME)
-                    .map(name => caches.delete(name))
-            );
-        })
+        caches.keys().then((names) =>
+            Promise.all(
+                names
+                    .filter((name) => name.startsWith("padyak-all-") && name !== CACHE_NAME)
+                    .map((name) => caches.delete(name))
+            )
+        ).then(() => self.clients.claim())
     );
-
-    self.clients.claim();
 });
 
-self.addEventListener("fetch", event => {
+// FETCH
+self.addEventListener("fetch", (event) => {
+    const request = event.request;
+    const url = new URL(request.url);
 
-    if (event.request.method !== "GET") {
-        return;
-    }
+    if (request.method !== "GET") return;
+    if (url.origin !== self.location.origin) return;
 
+    // Network-first para sa pages at Vite resources.
+    // Hindi nagka-cache ng response dito.
     event.respondWith(
-        caches.match(event.request).then(cachedResponse => {
+        fetch(request).catch(async () => {
+            const cached = await caches.match(request);
 
-            
-            if (cachedResponse) {
-                return cachedResponse;
+            if (cached) return cached;
+
+            if (request.mode === "navigate") {
+                const fallback = await caches.match("/index.html");
+
+                if (fallback) return fallback;
             }
 
-            return fetch(event.request)
-                .then(networkResponse => {
-                    
-                    return caches.open(CACHE_NAME).then(cache => {
-                        cache.put(event.request, networkResponse.clone());
-                        return networkResponse;
-                    });
-                })
-                .catch(() => {
-                    
-                    console.warn("Fetch failed, walang cache at walang net:", event.request.url);
-                });
-
+            return new Response("Offline: resource unavailable.", {
+                status: 503,
+                headers: {
+                    "Content-Type": "text/plain; charset=utf-8"
+                }
+            });
         })
     );
-
 });

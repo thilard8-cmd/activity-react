@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+
+import { useEffect, useState } from "react";
+
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -6,14 +8,14 @@ import {
   signOut,
   createUserWithEmailAndPassword,
   updateProfile,
-} from 'firebase/auth';
+} from "firebase/auth";
 
 import {
   doc,
   getDoc,
   setDoc,
   serverTimestamp,
-} from 'firebase/firestore';
+} from "firebase/firestore";
 
 import {
   BrowserRouter,
@@ -21,28 +23,27 @@ import {
   Route,
   Navigate,
   useNavigate,
-} from 'react-router-dom';
+} from "react-router-dom";
 
-import Landing from './pages/Landing.jsx'
-import Login from './pages/Login.jsx';
-import Signup from './pages/Signup.jsx';
-import Display from './components/Display.jsx';
-import RiderDashboard from './pages/RiderDashboard.jsx';
+import Landing from "./pages/Landing.jsx";
+import Login from "./pages/Login.jsx";
+import Signup from "./pages/Signup.jsx";
+import Display from "./components/Display.jsx";
+import RiderDashboard from "./pages/RiderDashboard.jsx";
 
-import { auth, googleProvider, db } from './firebase.js';
-
+import { auth, googleProvider, db } from "./firebase.js";
 
 function ProtectedRoute({ user, role, allowedRoles, children }) {
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(role)) {
-    if (role === 'admin') {
+  if (!allowedRoles.includes(role)) {
+    if (role === "admin") {
       return <Navigate to="/admin" replace />;
     }
 
-    if (role === 'rider') {
+    if (role === "rider") {
       return <Navigate to="/rider-dashboard" replace />;
     }
 
@@ -52,17 +53,14 @@ function ProtectedRoute({ user, role, allowedRoles, children }) {
   return children;
 }
 
-function LoginPage({
-  handleLogin,
-  handleGoogleLogin,
-}) {
+function LoginPage({ handleLogin, handleGoogleLogin }) {
   const navigate = useNavigate();
 
   return (
     <Login
       onLogin={handleLogin}
       onGoogleLogin={handleGoogleLogin}
-      onSignup={() => navigate('/signup')}
+      onSignup={() => navigate("/signup")}
     />
   );
 }
@@ -73,7 +71,7 @@ function SignupPage({ handleSignup }) {
   return (
     <Signup
       onSignup={handleSignup}
-      onBackToLogin={() => navigate('/login')}
+      onBackToLogin={() => navigate("/login")}
     />
   );
 }
@@ -88,9 +86,10 @@ function AdminPage({ user, handleLogout }) {
   );
 }
 
-function RiderPage({ handleLogout }) {
+function RiderPage({ user, handleLogout }) {
   return (
     <RiderDashboard
+      user={user}
       onLogout={handleLogout}
     />
   );
@@ -100,85 +99,105 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const [authError, setAuthError] = useState('');
+  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     const unsubscribe = onAuthStateChanged(
       auth,
       async (currentUser) => {
         if (!currentUser) {
-          setUser(null);
-          setRole(null);
-          setLoading(false);
+          if (active) {
+            setUser(null);
+            setRole(null);
+            setLoading(false);
+          }
           return;
         }
 
-        try {
-          const userRef = doc(
-            db,
-            'users',
-            currentUser.uid
-          );
+        if (active) {
+          setLoading(true);
+        }
 
+        try {
+          const userRef = doc(db, "users", currentUser.uid);
           let userSnap = await getDoc(userRef);
 
-          const isGoogleUser =
-            currentUser.providerData.some(
-              (p) => p.providerId === 'google.com'
-            );
+          const isGoogleUser = currentUser.providerData.some(
+            (provider) => provider.providerId === "google.com"
+          );
 
+          // Bagong Google user: gumawa ng rider account.
+          // Huwag baguhin ang role ng existing user.
           if (!userSnap.exists() && isGoogleUser) {
             await setDoc(userRef, {
               uid: currentUser.uid,
-              name: currentUser.displayName || '',
-              email: currentUser.email || '',
-              role: 'rider',
+              name: currentUser.displayName || "",
+              email: currentUser.email || "",
+              role: "rider",
               createdAt: serverTimestamp(),
             });
 
             userSnap = await getDoc(userRef);
           }
 
-          const userRole = userSnap.exists()
-            ? userSnap.data().role
+          const userData = userSnap.exists()
+            ? userSnap.data()
             : null;
 
-          if (
-            userRole !== 'admin' &&
-            userRole !== 'rider'
-          ) {
-            await signOut(auth);
+          const userRole = userData?.role ?? null;
 
-            setUser(null);
-            setRole(null);
+          console.log("Logged-in UID:", currentUser.uid);
+          console.log("Firestore document exists:", userSnap.exists());
+          console.log("Firestore user data:", userData);
+          console.log("Firestore role:", userRole);
 
-            return;
+          if (userRole !== "admin" && userRole !== "rider") {
+            throw new Error(
+              "Walang valid role ang account. Tingnan ang users/" +
+                currentUser.uid +
+                " sa Firestore."
+            );
           }
 
-          setUser(currentUser);
-          setRole(userRole);
+          if (active) {
+            setUser(currentUser);
+            setRole(userRole);
+            setAuthError("");
+          }
         } catch (error) {
-          console.error(
-            'Unable to load user role:',
-            error
-          );
+          console.error("Unable to load user role:", error);
 
-          await signOut(auth);
+          if (active) {
+            setUser(null);
+            setRole(null);
+            setAuthError(
+              error.message || "Hindi ma-load ang user role."
+            );
+          }
 
-          setUser(null);
-          setRole(null);
+          try {
+            await signOut(auth);
+          } catch (signOutError) {
+            console.error("Sign-out error:", signOutError);
+          }
         } finally {
-          setLoading(false);
+          if (active) {
+            setLoading(false);
+          }
         }
       }
     );
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   async function handleLogin(email, password) {
-    setAuthError('');
+    setAuthError("");
 
     try {
       await signInWithEmailAndPassword(
@@ -187,80 +206,64 @@ export default function App() {
         password
       );
     } catch (error) {
-      console.error('Login error:', error);
-      setAuthError(error.message);
+      console.error("Login error:", error.code, error.message);
+      setAuthError(error.message || "Unable to log in.");
       throw error;
     }
   }
 
   async function handleGoogleLogin() {
-    setAuthError('');
+    setAuthError("");
 
     try {
-      await signInWithPopup(
-        auth,
-        googleProvider
-      );
-    } catch (error) {
-      console.error(
-        'Google login error:',
-        error
+      const result = await signInWithPopup(auth, googleProvider);
+
+      console.log(
+        "Google authentication successful:",
+        result.user.uid
       );
 
-      setAuthError(error.message);
+      // Ang onAuthStateChanged ang magbabasa ng Firestore role
+      // at mag-a-update ng user at role state.
+    } catch (error) {
+      console.error(
+        "Google login error:",
+        error.code,
+        error.message
+      );
+
+      setAuthError(error.message || "Unable to sign in with Google.");
       throw error;
     }
   }
 
-  async function handleSignup({
-    name,
-    email,
-    password,
-    role,
-  }) {
-    setAuthError('');
+  async function handleSignup({ name, email, password }) {
+    setAuthError("");
 
     try {
-      const credential =
-        await createUserWithEmailAndPassword(
-          auth,
-          email.trim(),
-          password
-        );
-
-      await updateProfile(
-        credential.user,
-        {
-          displayName: name.trim(),
-        }
+      const credential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
       );
 
-      await setDoc(
-        doc(
-          db,
-          'users',
-          credential.user.uid
-        ),
-        {
-          uid: credential.user.uid,
-          name: name.trim(),
-          email:
-            credential.user.email ||
-            email.trim(),
-          role,
-          createdAt: serverTimestamp(),
-        }
-      );
+      await updateProfile(credential.user, {
+        displayName: name.trim(),
+      });
+
+      await setDoc(doc(db, "users", credential.user.uid), {
+        uid: credential.user.uid,
+        name: name.trim(),
+        email: credential.user.email || email.trim(),
+        role: "rider",
+        createdAt: serverTimestamp(),
+      });
 
       setUser(credential.user);
-      setRole(role);
+      setRole("rider");
     } catch (error) {
-      console.error(
-        'Signup error:',
-        error
-      );
-
-      setAuthError(error.message);
+      console.error("Signup error:", error.code, error.message);
+      setAuthError(error.message || "Unable to sign up.");
       throw error;
     }
   }
@@ -268,24 +271,19 @@ export default function App() {
   async function handleLogout() {
     try {
       await signOut(auth);
+      setUser(null);
+      setRole(null);
+      setAuthError("");
     } catch (error) {
-      console.error(
-        'Logout error:',
-        error
-      );
+      console.error("Logout error:", error);
     }
   }
 
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center min-vh-100">
-        <div
-          className="spinner-border text-primary"
-          role="status"
-        >
-          <span className="visually-hidden">
-            Loading...
-          </span>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
         </div>
       </div>
     );
@@ -293,13 +291,26 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {authError && (
+        <div
+          className="alert alert-danger m-3"
+          role="alert"
+        >
+          {authError}
+        </div>
+      )}
+
       <Routes>
         <Route
           path="/"
           element={
             user ? (
               <Navigate
-                to={role === 'admin' ? '/admin' : '/rider-dashboard'}
+                to={
+                  role === "admin"
+                    ? "/admin"
+                    : "/rider-dashboard"
+                }
                 replace
               />
             ) : (
@@ -312,23 +323,18 @@ export default function App() {
           path="/login"
           element={
             user ? (
-              role === 'admin' ? (
-                <Navigate
-                  to="/admin"
-                  replace
-                />
-              ) : (
-                <Navigate
-                  to="/rider-dashboard"
-                  replace
-                />
-              )
+              <Navigate
+                to={
+                  role === "admin"
+                    ? "/admin"
+                    : "/rider-dashboard"
+                }
+                replace
+              />
             ) : (
               <LoginPage
                 handleLogin={handleLogin}
-                handleGoogleLogin={
-                  handleGoogleLogin
-                }
+                handleGoogleLogin={handleGoogleLogin}
               />
             )
           }
@@ -339,15 +345,15 @@ export default function App() {
           element={
             user ? (
               <Navigate
-                to="/rider-dashboard"
+                to={
+                  role === "admin"
+                    ? "/admin"
+                    : "/rider-dashboard"
+                }
                 replace
               />
             ) : (
-              <SignupPage
-                handleSignup={
-                  handleSignup
-                }
-              />
+              <SignupPage handleSignup={handleSignup} />
             )
           }
         />
@@ -358,12 +364,11 @@ export default function App() {
             <ProtectedRoute
               user={user}
               role={role}
-              allowedRoles={['rider']}
+              allowedRoles={["rider"]}
             >
               <RiderPage
-                handleLogout={
-                  handleLogout
-                }
+                user={user}
+                handleLogout={handleLogout}
               />
             </ProtectedRoute>
           }
@@ -375,13 +380,11 @@ export default function App() {
             <ProtectedRoute
               user={user}
               role={role}
-              allowedRoles={['admin']}
+              allowedRoles={["admin"]}
             >
               <AdminPage
                 user={user}
-                handleLogout={
-                  handleLogout
-                }
+                handleLogout={handleLogout}
               />
             </ProtectedRoute>
           }
@@ -389,14 +392,8 @@ export default function App() {
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/"
-              replace
-            />
-          }
+          element={<Navigate to="/" replace />}
         />
-
       </Routes>
     </BrowserRouter>
   );
